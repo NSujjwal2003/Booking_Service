@@ -40,19 +40,22 @@ async function makePayment(data){
     const transaction = await db.sequelize.transaction();
     try {
         const bookingDetails = await bookingRepository.get(data.bookingId, transaction);
-        if(bookingDetails.totalCost != data.totalCost){
-            throw new AppError('Total cost mismatch', StatusCodes.BAD_REQUEST);
+        if(bookingDetails.status == CANCELLED){
+            throw new AppError('Booking has been expired', StatusCodes.BAD_REQUEST);
         }
 
         const bookingTime = new Date(bookingDetails.createdAt);
         const currentTime = new Date();
 
         if(currentTime - bookingTime > 300000) { // 15 minutes in milliseconds
-            await bookingRepository.update(data.bookingId, {
-                status: CANCELLED,
-            }, transaction);
+            await cancelBooking(data.bookingId);
             throw new AppError('Booking has expired', StatusCodes.BAD_REQUEST);
         }
+
+        if(bookingDetails.totalCost != data.totalCost){
+            throw new AppError('Total cost mismatch', StatusCodes.BAD_REQUEST);
+        }
+
         if(bookingDetails.userId != data.userId){
             throw new AppError('User not authorized to make payment', StatusCodes.UNAUTHORIZED);
         }
@@ -62,6 +65,27 @@ async function makePayment(data){
             status: BOOKED,
         }, transaction);
 
+        await transaction.commit();
+    } catch (error) {
+        await transaction.rollback();
+        throw error;
+    }
+}
+
+async function cancelBooking(bookingId){ 
+    const transaction = await db.sequelize.transaction();
+
+    try {
+        const bookingDetails = await bookingRepository.get(bookingId, transaction);
+        if(bookingDetails.status == CANCELLED){
+            await transaction.commit();
+            return true;
+        }
+        await axios.patch(`${ServerConfig.FLIGHT_SERVICE}/api/v1/flights/${data.flightId}/seats`, {
+            seats : bookingDetails.noOfSeats,
+            dec : 0,
+        });
+        await bookingRepository.update(bookingId, {status: CANCELLED}, transaction);
         await transaction.commit();
     } catch (error) {
         await transaction.rollback();

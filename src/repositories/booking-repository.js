@@ -1,5 +1,7 @@
+const { StatusCodes } = require('http-status-codes');
 const { Booking } = require('../models');
 const CrudRepository = require('./crud-repository');
+const { Op } = require('sequelize');
 
 class BookingRepository extends CrudRepository {
     constructor() {
@@ -28,6 +30,16 @@ class BookingRepository extends CrudRepository {
         return response;
     }
 
+    async cancelOldBookings(timestamp){
+        const response = await Booking.find({
+            where: {
+                createdAt: {
+                    [Op.gt]: timestamp  
+                }
+            }
+        });
+        return response;
+    }
 }
 
 module.exports = BookingRepository;

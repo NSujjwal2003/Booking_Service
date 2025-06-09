@@ -1,7 +1,7 @@
 const axios = require('axios');
 const {StatusCodes} = require('http-status-codes');
 const {BookingRepository} = require('../repositories');
-const { ServerConfig } = require('../config');
+const { ServerConfig, Queue } = require('../config');
 
 const db = require('../models');
 const AppError = require('../utils/errors/app-error');
@@ -15,6 +15,7 @@ const bookingRepository = new BookingRepository();
 async function createBooking(data){
     const transaction = await db.sequelize.transaction();
     try {
+        console.log(data.flightId)
         const flight = await axios.get(`${ServerConfig.FLIGHT_SERVICE}/api/v1/flights/${data.flightId}`);
         const flightData = flight.data.data;
         if(data.noOfSeats > flightData.totalSeats){
@@ -65,6 +66,12 @@ async function makePayment(data){
         await bookingRepository.update(data.bookingId, {
             status: BOOKED,
         }, transaction);
+
+        Queue.sendData({
+            recepientEmail: 'uns.singh03@gmail.com',
+            subject: 'flight Booked',
+            text: `Booking successful for flight ${data.bookingId}`,
+        });
 
         await transaction.commit();
     } catch (error) {
